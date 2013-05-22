@@ -111,13 +111,15 @@ printCommands commands = do
 	return ()
 
 
--- ACTION "IO_ACTIONS"
-
+-- print error and wait for ENTER
 printError :: String -> IO ()
 printError str = do
 	putStrLn $ "ERROR: " ++ str ++ " [press Enter to continue]"
 	getLine
 	return()
+
+
+-- ACTION "IO_ACTIONS"
 
 -- IO_ACTION: Contacts list
 showContactList :: State -> [Contact] -> IO ()
@@ -165,7 +167,6 @@ removeContactIo state contactList args = do
 			showContactList state contactList
 	else do
 		printError "wrong number of params"
-		getLine
 		showContactList state contactList
 
 -- removes contact from current list given index
@@ -195,15 +196,14 @@ showContactIo state contactList args = do
 		if (index >= 0) && (index < (length contactList)) then do
 			putStrLn ""
 			putStrLn $ fullInfo (contactList !! index)
+			putStrLn "[press Enter to continue]"
 			getLine
 			showContactList state contactList
 		else do
 			printError "wrong index number"
-			getLine
 			showContactList state contactList
 	else do
 		printError "wrong number of params"
-		getLine
 		showContactList state contactList
 	
 
@@ -258,13 +258,11 @@ findIo state contactList args = do
 	if length args /= 2 then do
 		if length args /= 1 then do
 			printError "wrong number of params for find"
-			getLine
 			showContactList state contactList
 		else
 			if args !! 0 == "all" then showContactList state (contacts (addressBook state))
 			else do
 				printError "wrong number of params for find"
-				getLine
 				showContactList state contactList
 	else do
 		let specifier = args !! 0
@@ -273,7 +271,6 @@ findIo state contactList args = do
 				let result = findGroup (groups (addressBook state)) (args !! 1)
 				if isNothing result then do
 					printError "group not found"
-					getLine
 					showContactList state contactList
 				else do
 					let Just group = result
@@ -290,7 +287,6 @@ findIo state contactList args = do
 				showContactList state (findContactsByEmail (contacts (addressBook state)) (args !! 1))
 			otherwise -> do
 				printError "search criterion not implemented"
-				getLine
 				showContactList state contactList
 
 -- return group with given name
@@ -346,14 +342,14 @@ quitProgram state = do
 -- IO_ACTION: default
 defaultAction :: State -> [Contact] -> IO ()
 defaultAction state contactList = do
-	putStrLn "Not implemented :)"
-	getLine
+	printError "Not implemented :)"
 	showContactList state contactList
 
 
 -- MAIN FUNCTION
 main :: IO ()
 main = do
+	putStrLn "Address Book v0.1 - Piotr Trzpil, Aleksy Barcz";
 	addressBook <- loadAddressBook
 	showContactList (State addressBook) (contacts addressBook)
 	return ()
