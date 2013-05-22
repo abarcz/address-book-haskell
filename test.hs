@@ -91,20 +91,20 @@ printCommands commands = do
 
 -- ACTION SCREENS
 -- type for processing address book
-type Screen = AddressBook -> Screen -> IO ()
+type Action = AddressBook -> IO ()
 
 
 -- SCREEN: Contacts list
-showContactList :: Screen
+showContactList :: Action
 showContactList addressBook = do
 	showContactEntries (contacts addressBook)
 	let actionNames = ["add", "rm", "mod", "show"]
 	printCommands actionNames
 	(command:args) <- parseCommandLine
 	case command of
-		"add" -> defScreen addressBook
-		"rm" -> defScreen addressBook
-		--pytanie, czy tworzymy nowe Screen dla rm (wyświetla tylko pytanie y/n i usuwa), czy tu zmieniamy (?) zawartość addressBook
+		"add" -> defAction addressBook
+		"rm" -> defAction addressBook
+		--pytanie, czy tworzymy nowe Action dla rm (wyświetla tylko pytanie y/n i usuwa), czy tu zmieniamy (?) zawartość addressBook
 		otherwise -> do
 			putStrLn "Invalid command!"
 			showContactList addressBook
@@ -122,8 +122,8 @@ showContactEntry (contact:xs) n = do
 
 
 -- SCREEN: Add contact
-defScreen :: Screen
-defScreen addressBook = do
+defAction :: Action
+defAction addressBook = do
 	putStrLn "Not implemented :)"
 	return ()
 
