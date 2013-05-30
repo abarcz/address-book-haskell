@@ -118,6 +118,15 @@ printError str = do
 	getLine
 	return()
 
+-- gets input, if input == "" returns default
+getLineWithDefault :: String -> IO String
+getLineWithDefault defaultString = do
+	newString <- getLine
+	if newString == "" then do
+		return defaultString
+	else do
+		return newString
+
 
 -- ACTION "IO_ACTIONS"
 
@@ -133,7 +142,7 @@ showContactList state contactList = do
 		"quit" -> quitProgram state
 		"add" -> addContactIo state contactList
 		"rm" -> removeContactIo state contactList args
-		"mod" -> defaultAction state contactList
+		"mod" -> modifyContactIo state contactList args
 		"details" -> showContactIo state contactList args
 		"find" -> findIo state contactList args
 		"groups" -> defaultAction state contactList		-- TODO : should switch to group window from which groups can be managed
@@ -153,11 +162,56 @@ showContacts' (contact:xs) n = do
 	putStrLn ((show n) ++ ": " ++ description contact)
 	showContacts' xs (n + 1)
 
+-- IO_ACTION: modify existing contact
+modifyContactIo :: State -> [Contact] -> [String] -> IO ()
+modifyContactIo state contactList args = do
+	if length args == 1 then do
+		let index = read (args !! 0) :: Int -- TODO check if args[0] is an int
+		if (index >= 0) && (index < (length contactList)) then do
+			putStrLn ""
+			newContact <- modifyContactInfo (contactList !! index)
+			let (newContacts, removedId) = removeContact contactList index	-- remove old contact from current list
+			let newState = removeContactId state removedId	-- remove old contact from state
+			let (AddressBook bookName contacts groups) = addressBook newState -- unpack state
+			let newState2 = State (AddressBook bookName (newContact:contacts) groups)
+			showContactList newState2 (newContact:newContacts)
+		else do
+			printError "wrong index number"
+			showContactList state contactList
+	else do
+		printError "wrong number of params"
+		showContactList state contactList
+
+modifyContactInfo :: Contact -> IO Contact
+modifyContactInfo contact = do
+	-- TODO sanitize input
+	putStrLn $ "Name (" ++ (name contact) ++ "): "
+	cName <- getLineWithDefault (name contact)
+	putStrLn $ "Surname (" ++ (surname contact) ++ "): "
+	cSurname <- getLineWithDefault (surname contact)
+	putStrLn $ "Company (" ++ (company contact) ++ "): "
+	cCompany <- getLineWithDefault (company contact)
+	putStrLn $ "Phone number (" ++ (phoneNumber contact) ++ "): "
+	cPhoneNumber <- getLineWithDefault (phoneNumber contact)
+	putStrLn $ "Email (" ++ (email contact) ++ "): "
+	cEmail <- getLineWithDefault (email contact)
+	putStrLn $ "Birthday (" ++ (birthday contact) ++ "): "
+	cBirthday <- getLineWithDefault (birthday contact)
+	return Contact {
+		nr = nr contact,
+		name=cName,
+		surname=cSurname,
+		company=cCompany,
+		phoneNumber=cPhoneNumber,
+		email=cEmail,
+		birthday=cBirthday
+	}
+
 -- IO_ACTION: Remove contact from current list and from state, return to previous list
 removeContactIo :: State -> [Contact] -> [String] -> IO ()
 removeContactIo state contactList args = do
 	if length args == 1 then do
-		let index = read (args !! 0) :: Int	-- TODO check if args[0] is a int
+		let index = read (args !! 0) :: Int	-- TODO check if args[0] is an int
 		if (index >= 0) && (index < (length contactList)) then do
 			let (newContacts, removedId) = removeContact contactList index	-- remove contact from current list
 			let newState = removeContactId state removedId	-- remove contact from state
