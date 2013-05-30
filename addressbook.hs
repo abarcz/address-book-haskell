@@ -2,6 +2,7 @@
 import System.IO
 import System.IO.Error
 import Data.Maybe
+import Data.Char
 import Data.Time.Clock
 import Data.Time.Calendar
 import Data.Foldable (toList)
@@ -97,6 +98,14 @@ dropElement x [] = []
 dropElement x (y:xs) = if x == y then dropElement x xs
 	else x:(dropElement x xs)
 
+type Check = String -> Bool
+-- all kind of check for strings
+noCheck str = True
+isInt str = all isDigit str
+isAlphaString str = all isAlpha str
+isPhoneNumber str = (isInt str) && (length str > 6)
+isEmail str = (elem '@' str) && (elem '.' str)
+
 
 -- IO UTILITIES
 
@@ -145,6 +154,29 @@ getLineWithDefault defaultString = do
 	else do
 		return newString
 
+-- get input, performing a Check (can be noCheck)
+getValidString :: Check -> IO String
+getValidString check = do
+	string <- getLine
+	if check string then do
+		return string
+	else do
+		putStrLn "Incorrect format. Try again: "
+		getValidString check
+
+-- getLineWithDefault + Check
+getValidStringWithDefault :: Check -> String -> IO String
+getValidStringWithDefault check defaultString = do
+	string <- getLine
+	if string == "" then do
+		return defaultString
+	else do
+		if check string then do
+			return string
+		else do
+			putStrLn "Incorrect format. Try again or press Enter to use default: "
+			getValidStringWithDefault check defaultString
+
 getCurrentDate :: IO (Integer,Int,Int) -- :: (year,month,day)
 getCurrentDate = getCurrentTime >>= return . toGregorian . utctDay
 
@@ -156,15 +188,28 @@ printDate = do
 readDate :: IO (Integer, Int, Int)
 readDate = do
 	date <- getLine
+	parseDate date
+
+parseDate :: String -> IO (Integer, Int, Int)
+parseDate date = do
 	let strings = delimSplit date '.'
 	if length strings /= 3 then do
-		printError "incorrect format"
+		printError "incorrect format (should be day.month.year)"
 		readDate
 	else do
-		let day = read (strings !! 0) :: Int
-		let month = read (strings !! 1) :: Int
-		let year = read (strings !! 2) :: Integer
-		return (year, month, day)
+		if not (isInt (strings !! 0)) || not (isInt (strings !! 1)) || not (isInt (strings !! 2)) then do
+			printError "incorrect format (should be day.month.year)"
+			readDate
+		else do
+			let day = read (strings !! 0) :: Int
+			let month = read (strings !! 1) :: Int
+			let year = read (strings !! 2) :: Integer
+			let validDate = fromGregorianValid year month day
+			if isNothing validDate then do
+				printError "incorrect date"
+				readDate
+			else do
+				return (year, month, day)
 
 readDateWithDefault :: (Integer, Int, Int) -> IO (Integer, Int, Int)
 readDateWithDefault defaultDate = do
@@ -172,16 +217,8 @@ readDateWithDefault defaultDate = do
 	if date == "" then do
 		return defaultDate
 	else do
-		let strings = delimSplit date '.'
-		if length strings /= 3 then do
-			printError "incorrect format"
-			readDate
-		else do
-			let day = read (strings !! 0) :: Int
-			let month = read (strings !! 0) :: Int
-			let year = read (strings !! 0) :: Integer
-			return (year, month, day)
-	
+		parseDate date
+
 
 -- ACTION "IO_ACTIONS"
 
@@ -190,7 +227,7 @@ showContactList :: State -> [Contact] -> IO ()
 showContactList state contactList = do
 	putStrLn ""
 	showContacts contactList
-	let actionNames = ["quit", "add", "rm", "mod", "details", "find", "groups", "birthday"]
+	let actionNames = ["quit", "add", "rm", "mod", "details", "find", "groups", "birthday", "help"]
 	printCommands actionNames
 	(command:args) <- parseCommandLine
 	case command of
@@ -201,7 +238,29 @@ showContactList state contactList = do
 		"details" -> showContactIo state contactList args
 		"find" -> findIo state contactList args
 		"groups" -> showGroupList state
-		"birthday" -> showBirthdayIo state contactList
+		"birthday" -> do
+			showBirthdayIo state contactList
+			putStrLn "[press Enter to continue]"
+			getLine
+			showContactList state contactList
+		"help" -> do
+			putStrLn "Possible commands are:"
+			putStrLn "quit            - exit program"
+			putStrLn "add             - add new contact to address book"
+			putStrLn "rm <index>      - remove contact with given list index from address book"
+			putStrLn "mod <index>     - modify contact with given list index"
+			putStrLn "details <index> - show detailed info about contact"
+			putStrLn "find name/surname/company/phone/email/group <param> :"
+			putStrLn "                lists contacts matching search criterion, <param> can consist of multiple space-separated strings"
+			putStrLn "                example: find name John"
+			putStrLn "                example: find group Private Contacts"
+			putStrLn "find all        - list all contacts"
+			putStrLn "groups          - switch to contact groups menu"
+			putStrLn "birthday        - show contacts that have birthday today"
+			putStrLn "help            - show this menu"
+			putStrLn "[press Enter to continue]"
+			getLine
+			showContactList state contactList
 		otherwise -> do
 			printError "Invalid command!"
 			showContactList state contactList
@@ -229,7 +288,6 @@ showBirthdayIo state contactList = do
 	else do
 		putStrLn "Today celebrate birthday: "
 		showContacts' birthdays 0
-		showContactList state contactList
 
 getBirthdays :: State -> (Integer, Int, Int) -> [Contact]
 getBirthdays (State (AddressBook bookName contacts groups)) date =
@@ -244,35 +302,38 @@ getBirthdays' (x:xs) date = if (month (birthday x)) == (month date) && (day (bir
 modifyContactIo :: State -> [Contact] -> [String] -> IO ()
 modifyContactIo state contactList args = do
 	if length args == 1 then do
-		let index = read (args !! 0) :: Int -- TODO check if args[0] is an int
-		if (index >= 0) && (index < (length contactList)) then do
-			putStrLn ""
-			newContact <- modifyContactInfo (contactList !! index)
-			let (newContacts, removedId) = removeContact contactList index	-- remove old contact from current list
-			let newState = removeContactId state removedId	-- remove old contact from state
-			let (AddressBook bookName contacts groups) = addressBook newState -- unpack state
-			let newState2 = State (AddressBook bookName (newContact:contacts) groups)
-			showContactList newState2 (newContact:newContacts)
-		else do
-			printError "wrong index number"
+		if not (isInt (args !! 0)) then do
+			printError "index must be integer"
 			showContactList state contactList
+		else do
+			let index = read (args !! 0) :: Int
+			if (index >= 0) && (index < (length contactList)) then do
+				putStrLn ""
+				newContact <- modifyContactInfo (contactList !! index)
+				let (newContacts, removedId) = removeContact contactList index	-- remove old contact from current list
+				let newState = removeContactId state removedId	-- remove old contact from state
+				let (AddressBook bookName contacts groups) = addressBook newState -- unpack state
+				let newState2 = State (AddressBook bookName (newContact:contacts) groups)
+				showContactList newState2 (newContact:newContacts)
+			else do
+				printError "wrong index number"
+				showContactList state contactList
 	else do
 		printError "wrong number of params"
 		showContactList state contactList
 
 modifyContactInfo :: Contact -> IO Contact
 modifyContactInfo contact = do
-	-- TODO sanitize input
 	putStrLn $ "Name (" ++ (name contact) ++ "): "
-	cName <- getLineWithDefault (name contact)
+	cName <- getValidStringWithDefault isAlphaString (name contact)
 	putStrLn $ "Surname (" ++ (surname contact) ++ "): "
-	cSurname <- getLineWithDefault (surname contact)
+	cSurname <- getValidStringWithDefault isAlphaString(surname contact)
 	putStrLn $ "Company (" ++ (company contact) ++ "): "
 	cCompany <- getLineWithDefault (company contact)
 	putStrLn $ "Phone number (" ++ (phoneNumber contact) ++ "): "
-	cPhoneNumber <- getLineWithDefault (phoneNumber contact)
+	cPhoneNumber <- getValidStringWithDefault isPhoneNumber (phoneNumber contact)
 	putStrLn $ "Email (" ++ (email contact) ++ "): "
-	cEmail <- getLineWithDefault (email contact)
+	cEmail <- getValidStringWithDefault isEmail (email contact)
 	putStrLn $ "Birthday (" ++ (formatDate (birthday contact)) ++ "): "
 	cBirthday <- readDateWithDefault (birthday contact)
 	return Contact {
@@ -289,14 +350,18 @@ modifyContactInfo contact = do
 removeContactIo :: State -> [Contact] -> [String] -> IO ()
 removeContactIo state contactList args = do
 	if length args == 1 then do
-		let index = read (args !! 0) :: Int	-- TODO check if args[0] is a int
-		if (index >= 0) && (index < (length contactList)) then do
-			let (newContacts, removedId) = removeContact contactList index	-- remove contact from current list
-			let newState = removeContactId state removedId	-- remove contact from state
-			showContactList newState newContacts
-		else do
-			printError "wrong index number"
+		if not (isInt (args !! 0)) then do
+			printError "index must be integer"
 			showContactList state contactList
+		else do
+			let index = read (args !! 0) :: Int
+			if (index >= 0) && (index < (length contactList)) then do
+				let (newContacts, removedId) = removeContact contactList index	-- remove contact from current list
+				let newState = removeContactId state removedId	-- remove contact from state
+				showContactList newState newContacts
+			else do
+				printError "wrong index number"
+				showContactList state contactList
 	else do
 		printError "wrong number of params"
 		showContactList state contactList
@@ -324,20 +389,24 @@ removeFromGroups ((Group groupName ids):xs) nr = (Group groupName (dropElement n
 showContactIo :: State -> [Contact] -> [String] -> IO ()
 showContactIo state contactList args = do
 	if length args == 1 then do
-		let index = read (args !! 0) :: Int	-- TODO check if args[0] is a int
-		if (index >= 0) && (index < (length contactList)) then do
-			putStrLn ""
-			putStrLn $ fullInfo (contactList !! index)
-			putStrLn "[press Enter to continue]"
-			getLine
+		if not (isInt (args !! 0)) then do
+			printError "index must be integer"
 			showContactList state contactList
 		else do
-			printError "wrong index number"
-			showContactList state contactList
+			let index = read (args !! 0) :: Int
+			if (index >= 0) && (index < (length contactList)) then do
+				putStrLn ""
+				putStrLn $ fullInfo (contactList !! index)
+				putStrLn "[press Enter to continue]"
+				getLine
+				showContactList state contactList
+			else do
+				printError "wrong index number"
+				showContactList state contactList
 	else do
 		printError "wrong number of params"
 		showContactList state contactList
-	
+
 
 -- IO_ACTION: Add contact and return to previous list
 addContactIo :: State -> [Contact] -> IO ()
@@ -348,17 +417,16 @@ addContactIo (State (AddressBook bookName contacts groups)) contactList = do
 
 getContactInfo :: [Contact] -> IO Contact
 getContactInfo contacts = do
-	-- TODO sanitize input
 	putStrLn $ "Name: "
-	cName <- getLine
+	cName <- getValidString isAlphaString
 	putStrLn $ "Surname: "
-	cSurname <- getLine
+	cSurname <- getValidString isAlphaString
 	putStrLn $ "Company: "
 	cCompany <- getLine
 	putStrLn $ "Phone number: "
-	cPhoneNumber <- getLine
+	cPhoneNumber <- getValidStringWithDefault isPhoneNumber ""
 	putStrLn $ "Email: "
-	cEmail <- getLine
+	cEmail <- getValidStringWithDefault isEmail ""
 	putStrLn $ "Birthday: "
 	cBirthday <- readDate
 	return Contact {
@@ -387,7 +455,7 @@ collectIds (x:xs) = (nr x):(collectIds xs)
 -- find phone xxx etc
 findIo :: State -> [Contact] -> [String] -> IO ()
 findIo state contactList args = do
-	if length args /= 2 then do
+	if length args < 2 then do
 		if length args /= 1 then do
 			printError "wrong number of params for find"
 			showContactList state contactList
@@ -398,9 +466,10 @@ findIo state contactList args = do
 				showContactList state contactList
 	else do
 		let specifier = args !! 0
+		let param = foldr1 (\x y -> x ++ " " ++ y) (drop 1 args)
 		case specifier of
 			"group" -> do
-				let result = findGroup (groups (addressBook state)) (args !! 1)
+				let result = findGroup (groups (addressBook state)) param
 				if isNothing result then do
 					printError "group not found"
 					showContactList state contactList
@@ -408,15 +477,15 @@ findIo state contactList args = do
 					let Just group = result
 					showContactList state (getContactsByIds (contacts (addressBook state)) (groupContacts group))
 			"name" -> do
-				showContactList state (findContactsByName (contacts (addressBook state)) (args !! 1))
+				showContactList state (findContactsByName (contacts (addressBook state)) param)
 			"surname" -> do
-				showContactList state (findContactsBySurname (contacts (addressBook state)) (args !! 1))
+				showContactList state (findContactsBySurname (contacts (addressBook state)) param)
 			"company" -> do
-				showContactList state (findContactsByCompany (contacts (addressBook state)) (args !! 1))
+				showContactList state (findContactsByCompany (contacts (addressBook state)) param)
 			"phone" -> do
-				showContactList state (findContactsByPhoneNumber (contacts (addressBook state)) (args !! 1))
+				showContactList state (findContactsByPhoneNumber (contacts (addressBook state)) param)
 			"email" -> do
-				showContactList state (findContactsByEmail (contacts (addressBook state)) (args !! 1))
+				showContactList state (findContactsByEmail (contacts (addressBook state)) param)
 			otherwise -> do
 				printError "search criterion not implemented"
 				showContactList state contactList
