@@ -222,7 +222,7 @@ showContactList :: State -> [Contact] -> IO ()
 showContactList state contactList = do
 	putStrLn ""
 	showContacts contactList
-	let actionNames = ["quit", "add", "rm", "mod", "details", "find", "groups", "birthday"]
+	let actionNames = ["quit", "add", "rm", "mod", "details", "find", "groups", "birthday", "help"]
 	printCommands actionNames
 	(command:args) <- parseCommandLine
 	case command of
@@ -233,7 +233,29 @@ showContactList state contactList = do
 		"details" -> showContactIo state contactList args
 		"find" -> findIo state contactList args
 		"groups" -> showGroupList state
-		"birthday" -> showBirthdayIo state contactList
+		"birthday" -> do
+			showBirthdayIo state contactList
+			putStrLn "[press Enter to continue]"
+			getLine
+			showContactList state contactList
+		"help" -> do
+			putStrLn "Possible commands are:"
+			putStrLn "quit            - exit program"
+			putStrLn "add             - add new contact to address book"
+			putStrLn "rm <index>      - remove contact with given list index from address book"
+			putStrLn "mod <index>     - modify contact with given list index"
+			putStrLn "details <index> - show detailed info about contact"
+			putStrLn "find name/surname/company/phone/email/group <param> :"
+			putStrLn "                lists contacts matching search criterion, <param> can consist of multiple space-separated strings"
+			putStrLn "                example: find name John"
+			putStrLn "                example: find group Private Contacts"
+			putStrLn "find all        - list all contacts"
+			putStrLn "groups          - switch to contact groups menu"
+			putStrLn "birthday        - show contacts that have birthday today"
+			putStrLn "help            - show this menu"
+			putStrLn "[press Enter to continue]"
+			getLine
+			showContactList state contactList
 		otherwise -> do
 			printError "Invalid command!"
 			showContactList state contactList
@@ -261,7 +283,6 @@ showBirthdayIo state contactList = do
 	else do
 		putStrLn "Today celebrate birthday: "
 		showContacts' birthdays 0
-		showContactList state contactList
 
 getBirthdays :: State -> (Integer, Int, Int) -> [Contact]
 getBirthdays (State (AddressBook bookName contacts groups)) date =
