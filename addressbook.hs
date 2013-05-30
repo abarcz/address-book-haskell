@@ -1,10 +1,15 @@
+{-# LANGUAGE DeriveDataTypeable, ExtendedDefaultRules, EmptyDataDecls #-}
 import System.IO
+import System.IO.Error
 import Data.Maybe
 import Data.Time.Clock
 import Data.Time.Calendar
 import Data.Foldable (toList)
 import Data.Sequence (fromList, update, elemIndexL)
---test
+import Text.JSON
+import Text.JSON.Generic
+
+
 -- DATA STRUCTURES
 
 data Contact = Contact {
@@ -15,7 +20,7 @@ data Contact = Contact {
 	phoneNumber :: String,
 	email :: String,
 	birthday :: (Integer, Int, Int)	-- year, month, day
-} deriving (Show)
+} deriving (Typeable, Data, Show)
 
 description contact = name contact ++ " " ++ surname contact
 
@@ -38,7 +43,7 @@ descriptionGroup group = (groupName group) ++ " - size: " ++ (show $ length $ gr
 data Group = Group {
 	groupName :: String,	-- must be unique, != "" (special name for all contacts)
 	groupContacts :: [Int]	-- ids
-} deriving (Show, Eq)
+} deriving (Typeable, Data, Show, Eq)
 
 
 
@@ -46,12 +51,12 @@ data AddressBook = AddressBook {
 	bookName :: String,
 	contacts :: [Contact],
 	groups :: [Group]
-} deriving (Show)
+} deriving (Typeable, Data, Show)
 
 
 data State = State {
 	addressBook :: AddressBook
-} deriving (Show)
+} deriving (Typeable, Data, Show)
 
 
 -- UTILITIES
@@ -463,6 +468,11 @@ findContactsBySurname (x:xs) value = if surname x == value then x:rest
 -- IO_ACTION: Quit program, save address book (TODO)
 quitProgram :: State -> IO ()
 quitProgram state = do
+
+
+	let jsonStrState = encodeJSON $ addressBook $ state
+	writeFile "addressBookData.json" jsonStrState
+
 	return ()
 
 
@@ -479,17 +489,23 @@ main = do
 	printDate
 	addressBook <- loadAddressBook
 	showBirthdayIo (State addressBook) (contacts addressBook)
-	showContactList (State addressBook) (contacts addressBook)
 	return ()
 
 loadAddressBook :: IO AddressBook
 loadAddressBook = do
 	-- TODO : should load address book from file
-	return (AddressBook "default" [(Contact 0 "John" "Smith" "Akasa" "" "" (1956, 05, 30)), (Contact 1 "John" "Doe" "" "678809902" "" (1988, 06, 01)), (Contact 2 "Paul" "Johnson" "" "" "pj@gmail.com" (1965, 06, 02))] [(Group "Private Contacts" [1])])
 
+	input <- try (readFile "addressBookData.json")
+	case input of
+		Left e -> do
+			if isDoesNotExistError e
+	        	then return getDefaultBook
+	        	else ioError e
+		Right jsonStr -> do 
+			let addrBook = decodeJSON jsonStr
+			return addrBook
 
-
-
+getDefaultBook = (AddressBook "default" [(Contact 0 "John" "Smith" "Akasa" "" "" (1956, 05, 30)), (Contact 1 "John" "Doe" "" "678809902" "" (1988, 06, 01)), (Contact 2 "Paul" "Johnson" "" "" "pj@gmail.com" (1965, 06, 02))] [(Group "Private Contacts" [1])])
 
 
 -- IO_ACTION: Groups list
@@ -498,7 +514,7 @@ showGroupList state  = do
 	putStrLn ""
 	let groupList = groups $ addressBook $ state
 	showGroups groupList
-	let actionNames = ["add", "rm", "mod", "details", "quit", "return"]
+	let actionNames = ["add", "rm", "mod", "details", "return"]
 	printCommands actionNames
 	(command:args) <- parseCommandLine
 	case command of
@@ -508,7 +524,7 @@ showGroupList state  = do
 		"mod" -> modifyGroup state args
 		"details" -> showGroupIo state args
 		"return" -> showContactList state (contacts $ addressBook $ state)
-		"quit" -> quitProgram state
+		
 		otherwise -> do
 			printError "Invalid command!"
 			showGroupList state
