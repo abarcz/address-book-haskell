@@ -1,5 +1,7 @@
 import System.IO
 import Data.Maybe
+import Data.Time.Clock
+import Data.Time.Calendar
 
 -- DATA STRUCTURES
 
@@ -127,6 +129,13 @@ getLineWithDefault defaultString = do
 	else do
 		return newString
 
+date :: IO (Integer,Int,Int) -- :: (year,month,day)
+date = getCurrentTime >>= return . toGregorian . utctDay
+
+printDate :: IO ()
+printDate = do
+	(year, month, day) <- date
+	putStrLn $ "Today is: " ++ (show day) ++ "." ++ (show month) ++ "." ++ (show year)
 
 -- ACTION "IO_ACTIONS"
 
@@ -399,11 +408,11 @@ defaultAction state contactList = do
 	printError "Not implemented :)"
 	showContactList state contactList
 
-
 -- MAIN FUNCTION
 main :: IO ()
 main = do
-	putStrLn "Address Book v0.1 - Piotr Trzpil, Aleksy Barcz";
+	putStrLn "Address Book v0.1 - Piotr Trzpil, Aleksy Barcz"
+	printDate
 	addressBook <- loadAddressBook
 	showContactList (State addressBook) (contacts addressBook)
 	return ()
