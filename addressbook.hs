@@ -14,17 +14,20 @@ data Contact = Contact {
 	company :: String,
 	phoneNumber :: String,
 	email :: String,
-	birthday :: String
+	birthday :: (Integer, Int, Int)	-- year, month, day
 } deriving (Show)
 
 description contact = name contact ++ " " ++ surname contact
+
+formatDate (year, month, day) =
+	show day ++ "." ++ show month ++ "." ++ show year
 
 fullInfo contact = "Name: " ++ name contact
 	++ "\nSurname: " ++ surname contact
 	++ "\nCompany: " ++ company contact
 	++ "\nPhone: " ++ phoneNumber contact
 	++ "\nEmail: " ++ email contact
-	++ "\nBirthday: " ++ birthday contact
+	++ "\nBirthday: " ++ (formatDate (birthday contact))
 
 descriptionGroup group = (groupName group) ++ " - size: " ++ (show $ length $ groupContacts $ group)
 
@@ -155,7 +158,7 @@ showContactList state contactList = do
 		"quit" -> quitProgram state
 		"add" -> addContactIo state contactList
 		"rm" -> removeContactIo state contactList args
-		"mod" -> defaultAction state contactList
+		"mod" -> modifyContactIo state contactList args
 		"details" -> showContactIo state contactList args
 		"find" -> findIo state contactList args
 		"groups" -> showGroupList state
@@ -174,6 +177,51 @@ showContacts' [] _ = do return ()
 showContacts' (contact:xs) n = do
 	putStrLn ((show n) ++ ": " ++ description contact)
 	showContacts' xs (n + 1)
+ 
+-- IO_ACTION: modify existing contact
+modifyContactIo :: State -> [Contact] -> [String] -> IO ()
+modifyContactIo state contactList args = do
+	if length args == 1 then do
+		let index = read (args !! 0) :: Int -- TODO check if args[0] is an int
+		if (index >= 0) && (index < (length contactList)) then do
+			putStrLn ""
+			newContact <- modifyContactInfo (contactList !! index)
+			let (newContacts, removedId) = removeContact contactList index	-- remove old contact from current list
+			let newState = removeContactId state removedId	-- remove old contact from state
+			let (AddressBook bookName contacts groups) = addressBook newState -- unpack state
+			let newState2 = State (AddressBook bookName (newContact:contacts) groups)
+			showContactList newState2 (newContact:newContacts)
+		else do
+			printError "wrong index number"
+			showContactList state contactList
+	else do
+		printError "wrong number of params"
+		showContactList state contactList
+
+modifyContactInfo :: Contact -> IO Contact
+modifyContactInfo contact = do
+	-- TODO sanitize input
+	putStrLn $ "Name (" ++ (name contact) ++ "): "
+	cName <- getLineWithDefault (name contact)
+	putStrLn $ "Surname (" ++ (surname contact) ++ "): "
+	cSurname <- getLineWithDefault (surname contact)
+	putStrLn $ "Company (" ++ (company contact) ++ "): "
+	cCompany <- getLineWithDefault (company contact)
+	putStrLn $ "Phone number (" ++ (phoneNumber contact) ++ "): "
+	cPhoneNumber <- getLineWithDefault (phoneNumber contact)
+	putStrLn $ "Email (" ++ (email contact) ++ "): "
+	cEmail <- getLineWithDefault (email contact)
+	putStrLn $ "Birthday (" ++ (formatDate (birthday contact)) ++ "): "
+	cBirthday <- getLineWithDefault ("aaa") -- TODO
+	return Contact {
+		nr = nr contact,
+		name=cName,
+		surname=cSurname,
+		company=cCompany,
+		phoneNumber=cPhoneNumber,
+		email=cEmail,
+		birthday=(01,01,01)
+	}
 
 -- IO_ACTION: Remove contact from current list and from state, return to previous list
 removeContactIo :: State -> [Contact] -> [String] -> IO ()
@@ -250,7 +298,7 @@ getContactInfo contacts = do
 	putStrLn $ "Email: "
 	cEmail <- getLine
 	putStrLn $ "Birthday: "
-	cBirthday <- getLine
+	-- cBirthday <- getLine -- TODO
 	return Contact {
 		nr = generateId contacts,
 		name=cName,
@@ -258,7 +306,7 @@ getContactInfo contacts = do
 		company=cCompany,
 		phoneNumber=cPhoneNumber,
 		email=cEmail,
-		birthday=cBirthday
+		birthday=(1977, 06, 03)
 	}
 
 -- generate id nr for a new contact
@@ -379,7 +427,7 @@ main = do
 loadAddressBook :: IO AddressBook
 loadAddressBook = do
 	-- TODO : should load address book from file
-	return (AddressBook "default" [(Contact 0 "John" "Smith" "Akasa" "" "" ""), (Contact 1 "John" "Doe" "" "678809902" "" ""), (Contact 2 "Paul" "Johnson" "" "" "" "pj@gmail.com")] [(Group "Private Contacts" [1])])
+	return (AddressBook "default" [(Contact 0 "John" "Smith" "Akasa" "" "" (1956, 05, 30)), (Contact 1 "John" "Doe" "" "678809902" "" (1988, 06, 01)), (Contact 2 "Paul" "Johnson" "" "" "pj@gmail.com" (1965, 06, 02))] [(Group "Private Contacts" [1])])
 
 
 
