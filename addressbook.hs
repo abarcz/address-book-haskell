@@ -4,7 +4,7 @@ import Data.Time.Clock
 import Data.Time.Calendar
 import Data.Foldable (toList)
 import Data.Sequence (fromList, update, elemIndexL)
-
+--test
 -- DATA STRUCTURES
 
 data Contact = Contact {
