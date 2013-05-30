@@ -1,5 +1,7 @@
 import System.IO
 import Data.Maybe
+import Data.Foldable (toList)
+import Data.Sequence (fromList, update, elemIndexL)
 
 -- DATA STRUCTURES
 
@@ -22,11 +24,13 @@ fullInfo contact = "Name: " ++ name contact
 	++ "\nEmail: " ++ email contact
 	++ "\nBirthday: " ++ birthday contact
 
+descriptionGroup group = (groupName group) ++ " - size: " ++ (show $ length $ groupContacts $ group)
 
 data Group = Group {
 	groupName :: String,	-- must be unique, != "" (special name for all contacts)
 	groupContacts :: [Int]	-- ids
-} deriving (Show)
+} deriving (Show, Eq)
+
 
 
 data AddressBook = AddressBook {
@@ -118,15 +122,6 @@ printError str = do
 	getLine
 	return()
 
--- gets input, if input == "" returns default
-getLineWithDefault :: String -> IO String
-getLineWithDefault defaultString = do
-	newString <- getLine
-	if newString == "" then do
-		return defaultString
-	else do
-		return newString
-
 
 -- ACTION "IO_ACTIONS"
 
@@ -142,10 +137,10 @@ showContactList state contactList = do
 		"quit" -> quitProgram state
 		"add" -> addContactIo state contactList
 		"rm" -> removeContactIo state contactList args
-		"mod" -> modifyContactIo state contactList args
+		"mod" -> defaultAction state contactList
 		"details" -> showContactIo state contactList args
 		"find" -> findIo state contactList args
-		"groups" -> defaultAction state contactList		-- TODO : should switch to group window from which groups can be managed
+		"groups" -> showGroupList state
 		"birthday" -> defaultAction state contactList	-- TODO
 		otherwise -> do
 			printError "Invalid command!"
@@ -162,56 +157,11 @@ showContacts' (contact:xs) n = do
 	putStrLn ((show n) ++ ": " ++ description contact)
 	showContacts' xs (n + 1)
 
--- IO_ACTION: modify existing contact
-modifyContactIo :: State -> [Contact] -> [String] -> IO ()
-modifyContactIo state contactList args = do
-	if length args == 1 then do
-		let index = read (args !! 0) :: Int -- TODO check if args[0] is an int
-		if (index >= 0) && (index < (length contactList)) then do
-			putStrLn ""
-			newContact <- modifyContactInfo (contactList !! index)
-			let (newContacts, removedId) = removeContact contactList index	-- remove old contact from current list
-			let newState = removeContactId state removedId	-- remove old contact from state
-			let (AddressBook bookName contacts groups) = addressBook newState -- unpack state
-			let newState2 = State (AddressBook bookName (newContact:contacts) groups)
-			showContactList newState2 (newContact:newContacts)
-		else do
-			printError "wrong index number"
-			showContactList state contactList
-	else do
-		printError "wrong number of params"
-		showContactList state contactList
-
-modifyContactInfo :: Contact -> IO Contact
-modifyContactInfo contact = do
-	-- TODO sanitize input
-	putStrLn $ "Name (" ++ (name contact) ++ "): "
-	cName <- getLineWithDefault (name contact)
-	putStrLn $ "Surname (" ++ (surname contact) ++ "): "
-	cSurname <- getLineWithDefault (surname contact)
-	putStrLn $ "Company (" ++ (company contact) ++ "): "
-	cCompany <- getLineWithDefault (company contact)
-	putStrLn $ "Phone number (" ++ (phoneNumber contact) ++ "): "
-	cPhoneNumber <- getLineWithDefault (phoneNumber contact)
-	putStrLn $ "Email (" ++ (email contact) ++ "): "
-	cEmail <- getLineWithDefault (email contact)
-	putStrLn $ "Birthday (" ++ (birthday contact) ++ "): "
-	cBirthday <- getLineWithDefault (birthday contact)
-	return Contact {
-		nr = nr contact,
-		name=cName,
-		surname=cSurname,
-		company=cCompany,
-		phoneNumber=cPhoneNumber,
-		email=cEmail,
-		birthday=cBirthday
-	}
-
 -- IO_ACTION: Remove contact from current list and from state, return to previous list
 removeContactIo :: State -> [Contact] -> [String] -> IO ()
 removeContactIo state contactList args = do
 	if length args == 1 then do
-		let index = read (args !! 0) :: Int	-- TODO check if args[0] is an int
+		let index = read (args !! 0) :: Int	-- TODO check if args[0] is a int
 		if (index >= 0) && (index < (length contactList)) then do
 			let (newContacts, removedId) = removeContact contactList index	-- remove contact from current list
 			let newState = removeContactId state removedId	-- remove contact from state
@@ -411,4 +361,206 @@ main = do
 loadAddressBook :: IO AddressBook
 loadAddressBook = do
 	-- TODO : should load address book from file
-	return (AddressBook "default" [(Contact 0 "John" "Smith" "Akasa" "" "" ""), (Contact 0 "John" "Doe" "" "678809902" "" ""), (Contact 1 "Paul" "Johnson" "" "" "" "pj@gmail.com")] [(Group "private" [1])])
+	return (AddressBook "default" [(Contact 0 "John" "Smith" "Akasa" "" "" ""), (Contact 1 "John" "Doe" "" "678809902" "" ""), (Contact 2 "Paul" "Johnson" "" "" "" "pj@gmail.com")] [(Group "Private Contacts" [1])])
+
+
+
+
+
+
+-- IO_ACTION: Groups list
+showGroupList :: State -> IO ()
+showGroupList state  = do
+	putStrLn ""
+	let groupList = groups $ addressBook $ state
+	showGroups groupList
+	let actionNames = ["add", "rm", "mod", "details", "quit", "return"]
+	printCommands actionNames
+	(command:args) <- parseCommandLine
+	case command of
+		
+		"add" -> addGroupIo state
+		"rm" -> removeGroupIo state groupList args
+		"mod" -> modifyGroup state args
+		"details" -> showGroupIo state args
+		"return" -> showContactList state (contacts $ addressBook $ state)
+		"quit" -> quitProgram state
+		otherwise -> do
+			printError "Invalid command!"
+			showGroupList state
+	return ()
+
+
+
+
+-- IO_ACTION: Add group and return to previous list
+addGroupIo :: State -> IO ()
+addGroupIo (State (AddressBook bookName contacts groups))=do 
+	group <- getGroupInfo groups
+	let newState = State (AddressBook bookName contacts (group:groups))
+	showGroupList newState	
+
+
+
+-- IO_ACTION: Creates a new group
+getGroupInfo :: [Group] -> IO Group
+getGroupInfo groups = do
+	-- TODO sanitize input
+	putStrLn $ "Name: "
+	gName <- getLine
+	
+	return Group {
+		groupName=gName,
+		groupContacts = []
+	}
+
+-- IO_ACTION: Shows group list
+showGroups :: [Group] -> IO()
+showGroups groupList = do
+	putStrLn "Groups:"
+	showGroups' groupList 0
+
+showGroups' [] _ = do return ()
+showGroups' (group:xs) n = do
+	putStrLn ((show n) ++ ": " ++ descriptionGroup group)
+	showGroups' xs (n + 1)
+
+
+-- IO_ACTION: Gets group by index
+getGroupByIndexIo :: [Group] -> [String] -> IO (Maybe Group)
+getGroupByIndexIo groupList args = do
+	if length args == 1 then do
+
+		let index = read (args !! 0) :: Int	-- TODO check if args[0] is a int
+		if (index >= 0) && (index < (length groupList)) then do
+			return (Just (groupList !! index))
+		else do
+			printError "wrong index number"
+			return Nothing
+	else do
+		printError "wrong number of params"
+		return Nothing
+	
+
+-- IO_ACTION: Shows details of a group
+showGroupIo :: State -> [String] -> IO()
+showGroupIo state args = do 
+	let groupList = groups $ addressBook $ state
+	mGroup <- getGroupByIndexIo groupList args
+	case mGroup of
+		Just group -> do
+			putStrLn ""
+			fullInfoGroup group (contacts $ addressBook $ state)
+			putStrLn "[press Enter to continue]"
+			getLine
+			showGroupList state
+		_ -> do
+			showGroupList state
+
+-- IO_ACTION: shows content of a group
+fullInfoGroup :: Group -> [Contact] -> IO()
+fullInfoGroup group contactList = do
+	putStrLn $ "Group name: " ++ (groupName group)
+	showContacts $ filter (\c -> (nr c) `elem` (groupContacts group) ) contactList
+
+
+
+-- IO_ACTION: Remove group from current list and from state, return to previous list
+removeGroupIo :: State -> [Group] -> [String] -> IO ()
+removeGroupIo state groupList args = do
+	let groupList = groups $ addressBook $ state
+	mGroup <- getGroupByIndexIo groupList args
+	case mGroup of
+		Just group -> do
+			let newGroups = filter (\g -> groupName g /= groupName group) groupList
+			let newState = State (AddressBook ( bookName $ addressBook $ state )  ( contacts $ addressBook $ state ) newGroups)
+			showGroupList newState
+		_ -> do
+			showGroupList state
+
+
+
+-- IO_ACTION: entry function to modify a group
+modifyGroup :: State -> [String] -> IO()
+modifyGroup state args = do
+	let groupList = groups $ addressBook $ state
+	mGroup <- getGroupByIndexIo groupList args
+	case mGroup of
+		Just group -> do
+			showModifyGroupScreen state group
+		_ -> do
+			showGroupList state
+
+
+
+-- IO_ACTION: Shows a screen that allows to rename a groups and manipulate its contacts
+showModifyGroupScreen :: State -> Group -> IO ()
+showModifyGroupScreen state group  = do
+	putStrLn ""
+
+	fullInfoGroup group (contacts $ addressBook $ state)
+
+	let actionNames = ["rename", "addContact", "rmContact", "return"]
+	printCommands actionNames
+	(command:args) <- parseCommandLine
+	case command of
+		
+		"rename" -> renameGroupIo state group
+		"addContact" -> addGroupContactIo state group
+		"rmContact" -> removeGroupContactIo state group
+		"return" -> showGroupList state
+		otherwise -> do
+			printError "Invalid command!"
+			showModifyGroupScreen state group
+	return ()
+
+-- updates given group with a given newGroup
+updateGroup :: State -> Group -> Group -> State
+updateGroup (State (AddressBook bookName contacts groups)) group newGroup = 
+	let groupSeq = fromList groups
+	in let index = fromJust $ elemIndexL group groupSeq
+	in let newGroups = toList $ update index newGroup $ groupSeq
+	in let newState = State (AddressBook bookName contacts (newGroups))
+	in newState
+
+
+-- IO_ACTION: Renames given group
+renameGroupIo :: State -> Group -> IO ()
+renameGroupIo state group = do 
+	putStrLn $ "Choose new name: "
+	gName <- getLine
+	let newGroup = Group gName (groupContacts group)
+	let newState = updateGroup state group newGroup
+	showModifyGroupScreen newState newGroup
+
+
+
+-- IO_ACTION: Adds a contact to given group
+addGroupContactIo :: State -> Group -> IO()
+addGroupContactIo state group = do
+	let availableContacts = filter (\c -> not ((nr c) `elem` (groupContacts group)) ) (contacts $ addressBook $ state)
+	putStrLn $ "Available contacts: "
+	showContacts' availableContacts 0
+	putStrLn $ "Select contact to add to group: "
+	input <- getLine
+	let index = read(input) :: Int--TODO sanitize
+	let selectedContact = availableContacts !! index
+	let newGroup = Group (groupName group) ((nr selectedContact):(groupContacts group))
+	
+	let newState = updateGroup state group newGroup
+	showModifyGroupScreen newState newGroup
+
+-- IO_ACTION: Removes a contact from given group
+removeGroupContactIo :: State -> Group -> IO()
+removeGroupContactIo state group = do
+	let inGroupContacts = filter (\c -> ((nr c) `elem` (groupContacts group)) ) (contacts $ addressBook $ state)
+	putStrLn $ "Contacts in current group: "
+	showContacts' inGroupContacts 0
+	putStrLn $ "Select contact to remove from group: "
+	input <- getLine
+	let index = read(input) :: Int--TODO sanitize
+	let selectedContact = inGroupContacts !! index
+	let newGroup = Group (groupName group) (filter (\contNr -> contNr /= (nr selectedContact) ) (groupContacts group))
+	
+	let newState = updateGroup state group newGroup
+	showModifyGroupScreen newState newGroup
