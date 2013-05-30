@@ -284,7 +284,7 @@ showBirthdayIo state contactList = do
 	let birthdays = getBirthdays state today
 	if length birthdays == 0 then do
 		putStrLn "No birthdays today"
-		showContactList state contactList
+		
 	else do
 		putStrLn "Today celebrate birthday: "
 		showContacts' birthdays 0
@@ -558,6 +558,7 @@ main = do
 	printDate
 	addressBook <- loadAddressBook
 	showBirthdayIo (State addressBook) (contacts addressBook)
+	showContactList (State addressBook) (contacts addressBook)
 	return ()
 
 loadAddressBook :: IO AddressBook
