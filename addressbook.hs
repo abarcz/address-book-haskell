@@ -22,6 +22,10 @@ description contact = name contact ++ " " ++ surname contact
 formatDate (year, month, day) =
 	show day ++ "." ++ show month ++ "." ++ show year
 
+year (a, b, c) = a
+month (a, b, c) = b
+day (a, b, c) = c
+
 fullInfo contact = "Name: " ++ name contact
 	++ "\nSurname: " ++ surname contact
 	++ "\nCompany: " ++ company contact
@@ -136,13 +140,43 @@ getLineWithDefault defaultString = do
 	else do
 		return newString
 
-date :: IO (Integer,Int,Int) -- :: (year,month,day)
-date = getCurrentTime >>= return . toGregorian . utctDay
+getCurrentDate :: IO (Integer,Int,Int) -- :: (year,month,day)
+getCurrentDate = getCurrentTime >>= return . toGregorian . utctDay
 
 printDate :: IO ()
 printDate = do
-	(year, month, day) <- date
-	putStrLn $ "Today is: " ++ (show day) ++ "." ++ (show month) ++ "." ++ (show year)
+	today <- getCurrentDate
+	putStrLn $ "Today is: " ++ (formatDate today)
+
+readDate :: IO (Integer, Int, Int)
+readDate = do
+	date <- getLine
+	let strings = delimSplit date '.'
+	if length strings /= 3 then do
+		printError "incorrect format"
+		readDate
+	else do
+		let day = read (strings !! 0) :: Int
+		let month = read (strings !! 1) :: Int
+		let year = read (strings !! 2) :: Integer
+		return (year, month, day)
+
+readDateWithDefault :: (Integer, Int, Int) -> IO (Integer, Int, Int)
+readDateWithDefault defaultDate = do
+	date <- getLine
+	if date == "" then do
+		return defaultDate
+	else do
+		let strings = delimSplit date '.'
+		if length strings /= 3 then do
+			printError "incorrect format"
+			readDate
+		else do
+			let day = read (strings !! 0) :: Int
+			let month = read (strings !! 0) :: Int
+			let year = read (strings !! 0) :: Integer
+			return (year, month, day)
+	
 
 -- ACTION "IO_ACTIONS"
 
@@ -162,7 +196,7 @@ showContactList state contactList = do
 		"details" -> showContactIo state contactList args
 		"find" -> findIo state contactList args
 		"groups" -> showGroupList state
-		"birthday" -> defaultAction state contactList	-- TODO
+		"birthday" -> showBirthdayIo state contactList
 		otherwise -> do
 			printError "Invalid command!"
 			showContactList state contactList
@@ -177,6 +211,29 @@ showContacts' [] _ = do return ()
 showContacts' (contact:xs) n = do
 	putStrLn ((show n) ++ ": " ++ description contact)
 	showContacts' xs (n + 1)
+
+
+-- IO_ACTION: show people with birthday today
+showBirthdayIo :: State -> [Contact] -> IO ()
+showBirthdayIo state contactList = do
+	today <- getCurrentDate
+	let birthdays = getBirthdays state today
+	if length birthdays == 0 then do
+		putStrLn "No birthdays today"
+		showContactList state contactList
+	else do
+		putStrLn "Today celebrate birthday: "
+		showContacts' birthdays 0
+		showContactList state contactList
+
+getBirthdays :: State -> (Integer, Int, Int) -> [Contact]
+getBirthdays (State (AddressBook bookName contacts groups)) date =
+	getBirthdays' contacts date
+
+getBirthdays' :: [Contact] -> (Integer, Int, Int) -> [Contact]
+getBirthdays' [] _ = []
+getBirthdays' (x:xs) date = if (month (birthday x)) == (month date) && (day (birthday x)) == (day date) then x:(getBirthdays' xs date)
+	else getBirthdays' xs date
  
 -- IO_ACTION: modify existing contact
 modifyContactIo :: State -> [Contact] -> [String] -> IO ()
@@ -212,7 +269,7 @@ modifyContactInfo contact = do
 	putStrLn $ "Email (" ++ (email contact) ++ "): "
 	cEmail <- getLineWithDefault (email contact)
 	putStrLn $ "Birthday (" ++ (formatDate (birthday contact)) ++ "): "
-	cBirthday <- getLineWithDefault ("aaa") -- TODO
+	cBirthday <- readDateWithDefault (birthday contact)
 	return Contact {
 		nr = nr contact,
 		name=cName,
@@ -220,7 +277,7 @@ modifyContactInfo contact = do
 		company=cCompany,
 		phoneNumber=cPhoneNumber,
 		email=cEmail,
-		birthday=(01,01,01)
+		birthday=cBirthday
 	}
 
 -- IO_ACTION: Remove contact from current list and from state, return to previous list
@@ -298,7 +355,7 @@ getContactInfo contacts = do
 	putStrLn $ "Email: "
 	cEmail <- getLine
 	putStrLn $ "Birthday: "
-	-- cBirthday <- getLine -- TODO
+	cBirthday <- readDate
 	return Contact {
 		nr = generateId contacts,
 		name=cName,
@@ -306,7 +363,7 @@ getContactInfo contacts = do
 		company=cCompany,
 		phoneNumber=cPhoneNumber,
 		email=cEmail,
-		birthday=(1977, 06, 03)
+		birthday=cBirthday
 	}
 
 -- generate id nr for a new contact
@@ -421,6 +478,7 @@ main = do
 	putStrLn "Address Book v0.1 - Piotr Trzpil, Aleksy Barcz"
 	printDate
 	addressBook <- loadAddressBook
+	showBirthdayIo (State addressBook) (contacts addressBook)
 	showContactList (State addressBook) (contacts addressBook)
 	return ()
 
