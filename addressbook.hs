@@ -615,9 +615,9 @@ addGroupIo (State (AddressBook bookName contacts groups))=do
 -- IO_ACTION: Creates a new group
 getGroupInfo :: [Group] -> IO Group
 getGroupInfo groups = do
-	-- TODO sanitize input
+	
 	putStrLn $ "Name: "
-	gName <- getLine
+	gName <- getValidString isAlphaString
 	
 	return Group {
 		groupName=gName,
@@ -640,13 +640,16 @@ showGroups' (group:xs) n = do
 getGroupByIndexIo :: [Group] -> [String] -> IO (Maybe Group)
 getGroupByIndexIo groupList args = do
 	if length args == 1 then do
-
-		let index = read (args !! 0) :: Int	-- TODO check if args[0] is a int
-		if (index >= 0) && (index < (length groupList)) then do
-			return (Just (groupList !! index))
-		else do
-			printError "wrong index number"
+		if not (isInt (args !! 0)) then do
+			printError "index must be integer"
 			return Nothing
+		else do
+			let index = read (args !! 0) :: Int	-- TODO check if args[0] is a int
+			if (index >= 0) && (index < (length groupList)) then do
+				return (Just (groupList !! index))
+			else do
+				printError "wrong index number"
+				return Nothing
 	else do
 		printError "wrong number of params"
 		return Nothing
@@ -738,7 +741,8 @@ updateGroup (State (AddressBook bookName contacts groups)) group newGroup =
 renameGroupIo :: State -> Group -> IO ()
 renameGroupIo state group = do 
 	putStrLn $ "Choose new name: "
-	gName <- getLine
+	gName <- getValidString isAlphaString
+
 	let newGroup = Group gName (groupContacts group)
 	let newState = updateGroup state group newGroup
 	showModifyGroupScreen newState newGroup
@@ -753,12 +757,23 @@ addGroupContactIo state group = do
 	showContacts' availableContacts 0
 	putStrLn $ "Select contact to add to group: "
 	input <- getLine
-	let index = read(input) :: Int--TODO sanitize
-	let selectedContact = availableContacts !! index
-	let newGroup = Group (groupName group) ((nr selectedContact):(groupContacts group))
 	
-	let newState = updateGroup state group newGroup
-	showModifyGroupScreen newState newGroup
+
+	if not (isInt (input )) then do
+			printError "index must be integer"
+			addGroupContactIo state group
+		else do 
+			let index = read (input) :: Int	
+			if (index >= 0) && (index < (length availableContacts)) then do
+				let selectedContact = availableContacts !! index
+				let newGroup = Group (groupName group) ((nr selectedContact):(groupContacts group))
+				
+				let newState = updateGroup state group newGroup
+				showModifyGroupScreen newState newGroup
+			else do
+				printError "wrong index number"
+				addGroupContactIo state group
+
 
 -- IO_ACTION: Removes a contact from given group
 removeGroupContactIo :: State -> Group -> IO()
@@ -768,9 +783,21 @@ removeGroupContactIo state group = do
 	showContacts' inGroupContacts 0
 	putStrLn $ "Select contact to remove from group: "
 	input <- getLine
-	let index = read(input) :: Int--TODO sanitize
-	let selectedContact = inGroupContacts !! index
-	let newGroup = Group (groupName group) (filter (\contNr -> contNr /= (nr selectedContact) ) (groupContacts group))
+
+	if not (isInt (input )) then do
+			printError "index must be integer"
+			removeGroupContactIo state group
+		else do 
+			let index = read (input) :: Int	
+			if (index >= 0) && (index < (length inGroupContacts)) then do
+				let selectedContact = inGroupContacts !! index
+				let newGroup = Group (groupName group) (filter (\contNr -> contNr /= (nr selectedContact) ) (groupContacts group))
+				let newState = updateGroup state group newGroup
+				showModifyGroupScreen newState newGroup
+
+			else do
+				printError "wrong index number"
+				removeGroupContactIo state group
+
+
 	
-	let newState = updateGroup state group newGroup
-	showModifyGroupScreen newState newGroup
