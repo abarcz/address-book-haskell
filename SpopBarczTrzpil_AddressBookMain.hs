@@ -381,7 +381,7 @@ showGroupList state  = do
 	putStrLn ""
 	let groupList = groups $ addressBook $ state
 	showGroups groupList
-	let actionNames = ["add", "rm", "mod", "details", "return"]
+	let actionNames = ["add", "rm", "mod", "details", "help", "return"]
 	printCommands actionNames
 	(command:args) <- parseCommandLine
 	case command of
@@ -391,7 +391,17 @@ showGroupList state  = do
 		"mod" -> modifyGroup state args
 		"details" -> showGroupIo state args
 		"return" -> showContactList state (contacts $ addressBook $ state)
-		
+		"help" -> do
+			putStrLn "Possible commands are:"
+			putStrLn "add             - add new group to address book"
+			putStrLn "rm <index>      - remove group with given list index from address book"
+			putStrLn "mod <index>     - modify group with given list index - switch to modify group menu"
+			putStrLn "details <index> - show detailed info about a group with given list index"
+			putStrLn "return          - return to contact list menu"
+			putStrLn "help            - show this menu"
+			putStrLn "[press Enter to continue]"
+			getLine
+			showGroupList state
 		otherwise -> do
 			printError "Invalid command!"
 			showGroupList state
@@ -510,7 +520,7 @@ showModifyGroupScreen state group  = do
 
 	fullInfoGroup group (contacts $ addressBook $ state)
 
-	let actionNames = ["rename", "addContact", "rmContact", "return"]
+	let actionNames = ["rename", "addContact", "rmContact", "help" , "return"]
 	printCommands actionNames
 	(command:args) <- parseCommandLine
 	case command of
@@ -519,6 +529,16 @@ showModifyGroupScreen state group  = do
 		"addContact" -> addGroupContactIo state group
 		"rmContact" -> removeGroupContactIo state group
 		"return" -> showGroupList state
+		"help" -> do
+			putStrLn "Possible commands are:"
+			putStrLn "rename          - choose a new name for this group"
+			putStrLn "addContact      - view available contacts to add to this group and enter list index of a contact to add."
+			putStrLn "rmContact       - view contacts to remove from this group and enter list index of a contact to remove."
+			putStrLn "return          - return to group list menu"
+			putStrLn "help            - show this menu"
+			putStrLn "[press Enter to continue]"
+			getLine
+			showModifyGroupScreen state group
 		otherwise -> do
 			printError "Invalid command!"
 			showModifyGroupScreen state group
