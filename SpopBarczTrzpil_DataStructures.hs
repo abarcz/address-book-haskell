@@ -90,10 +90,6 @@ getIndex' _ [] _ = -1
 getIndex' x (y:xs) n = if x == y then n
 	else getIndex' x xs (n + 1)
 
--- remove all occurences of given value from list
-dropElement x [] = []
-dropElement x (y:xs) = if x == y then dropElement x xs
-	else x:(dropElement x xs)
 
 type Check = String -> Bool
 -- all kind of check for strings

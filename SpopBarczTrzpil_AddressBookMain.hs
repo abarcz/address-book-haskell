@@ -176,11 +176,13 @@ removeContactId (State (AddressBook bookName contacts groups)) nr =
 	State (AddressBook bookName newContacts newGroups) where
 		newContacts = removeContactId' contacts nr
 		newGroups = removeFromGroups groups nr
+
 removeContactId' (x:xs) nr2 = if (nr x) == nr2 then xs
 	else x:(removeContactId' xs nr2)
+
 removeFromGroups :: [Group] -> Int -> [Group]
 removeFromGroups [] _ = []
-removeFromGroups ((Group groupName ids):xs) nr = (Group groupName (dropElement nr ids)):(removeFromGroups xs nr)
+removeFromGroups ((Group groupName ids):xs) nr = (Group groupName (filter (\elem -> elem /= nr) ids)):(removeFromGroups xs nr)
 
 -- IO_ACTION: show details of a contact
 showContactIo :: State -> [Contact] -> [String] -> IO ()
@@ -570,51 +572,61 @@ renameGroupIo state group = do
 addGroupContactIo :: State -> Group -> IO()
 addGroupContactIo state group = do
 	let availableContacts = filter (\c -> not ((nr c) `elem` (groupContacts group)) ) (contacts $ addressBook $ state)
-	putStrLn $ "Available contacts: "
-	showContacts' availableContacts 0
-	putStrLn $ "Select contact to add to group: "
-	input <- getLine
-	
 
-	if not (isInt (input )) then do
-			printError "index must be integer"
-			addGroupContactIo state group
-		else do 
-			let index = read (input) :: Int	
-			if (index >= 0) && (index < (length availableContacts)) then do
-				let selectedContact = availableContacts !! index
-				let newGroup = Group (groupName group) ((nr selectedContact):(groupContacts group))
-				
-				let newState = updateGroup state group newGroup
-				showModifyGroupScreen newState newGroup
-			else do
-				printError "wrong index number"
+	if (length availableContacts) == 0 then do
+		printError "No contacts to add."
+		showModifyGroupScreen state group
+	else do
+		putStrLn $ "Available contacts: "
+		showContacts' availableContacts 0
+		putStrLn $ "Select contact to add to group: "
+		input <- getLine
+		
+
+		if not (isInt (input )) then do
+				printError "index must be integer"
 				addGroupContactIo state group
+			else do 
+				let index = read (input) :: Int	
+				if (index >= 0) && (index < (length availableContacts)) then do
+					let selectedContact = availableContacts !! index
+					let newGroup = Group (groupName group) ((nr selectedContact):(groupContacts group))
+					
+					let newState = updateGroup state group newGroup
+					showModifyGroupScreen newState newGroup
+				else do
+					printError "wrong index number"
+					addGroupContactIo state group
 
 
 -- IO_ACTION: Removes a contact from given group
 removeGroupContactIo :: State -> Group -> IO()
 removeGroupContactIo state group = do
 	let inGroupContacts = filter (\c -> ((nr c) `elem` (groupContacts group)) ) (contacts $ addressBook $ state)
-	putStrLn $ "Contacts in current group: "
-	showContacts' inGroupContacts 0
-	putStrLn $ "Select contact to remove from group: "
-	input <- getLine
 
-	if not (isInt (input )) then do
-			printError "index must be integer"
-			removeGroupContactIo state group
-		else do 
-			let index = read (input) :: Int	
-			if (index >= 0) && (index < (length inGroupContacts)) then do
-				let selectedContact = inGroupContacts !! index
-				let newGroup = Group (groupName group) (filter (\contNr -> contNr /= (nr selectedContact) ) (groupContacts group))
-				let newState = updateGroup state group newGroup
-				showModifyGroupScreen newState newGroup
+	if (length inGroupContacts) == 0 then do
+		printError "No contacts to remove."
+		showModifyGroupScreen state group
+	else do
+		putStrLn $ "Contacts in current group: "
+		showContacts' inGroupContacts 0
+		putStrLn $ "Select contact to remove from group: "
+		input <- getLine
 
-			else do
-				printError "wrong index number"
+		if not (isInt (input )) then do
+				printError "index must be integer"
 				removeGroupContactIo state group
+			else do 
+				let index = read (input) :: Int	
+				if (index >= 0) && (index < (length inGroupContacts)) then do
+					let selectedContact = inGroupContacts !! index
+					let newGroup = Group (groupName group) (filter (\contNr -> contNr /= (nr selectedContact) ) (groupContacts group))
+					let newState = updateGroup state group newGroup
+					showModifyGroupScreen newState newGroup
+
+				else do
+					printError "wrong index number"
+					removeGroupContactIo state group
 
 
 	
